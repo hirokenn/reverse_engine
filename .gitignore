@@ -1,0 +1,58 @@
+# Python 関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+venv/
+ENV/
+env/
+.env
+
+# IDE関連
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# プロジェクト特有
+.chainlit/
+chroma_db/
+output/
+.files/
+
+# ログファイル
+*.log
+
+# 一時ファイル
+tmp/
+temp/
+
+# データベース
+*.db
+*.sqlite
+*.sqlite3
+
+# 秘密情報
+.env
+
+# LLMモデルやキャッシュ
+.langchain.db 
