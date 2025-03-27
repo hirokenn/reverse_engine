@@ -6,14 +6,34 @@ from typing import Dict, List, Any
 import json
 import os
 
+from pydantic import BaseModel, Field
 from src.model_types import GraphState, ConsistencyCheckResult, ConsistencyCheckFeedback, DocumentSection
 from src.utils.llm_utils import (
     get_llm,
+    get_structured_llm,
     create_structured_prompt,
     CONSISTENCY_CHECK_SYSTEM_PROMPT,
     CONSISTENCY_CHECK_HUMAN_PROMPT
 )
 from src.utils.config import load_config
+
+
+class ConsistencyCheckResponse(BaseModel):
+    """整合性チェック結果のスキーマ"""
+    detailed_feedback: List[ConsistencyCheckFeedback] = Field(
+        description="カテゴリごとの詳細なフィードバック"
+    )
+    overall_score: float = Field(
+        description="整合性の総合スコア（0.0-1.0）",
+        ge=0.0,
+        le=1.0
+    )
+    is_consistent: bool = Field(
+        description="整合性があるかどうかのフラグ"
+    )
+    feedback: str = Field(
+        description="全体的なフィードバックメッセージ"
+    )
 
 
 def check_consistency(state: GraphState) -> GraphState:
@@ -134,46 +154,43 @@ def _check_section_consistency(
     Returns:
         チェック結果（detailed_feedback, overall_score, is_consistent, feedbackを含む辞書）
     """
-    # LLMインスタンスを取得
-    llm = get_llm()
-    
-    # プロンプトの作成
-    prompt = create_structured_prompt(
-        system_message=CONSISTENCY_CHECK_SYSTEM_PROMPT,
-        human_template=CONSISTENCY_CHECK_HUMAN_PROMPT,
-        input_variables={
-            "section_id": section.section_id,
-            "title": section.title,
-            "content": section.content,
-            "analysis_results": json.dumps(analysis_results, ensure_ascii=False, indent=2)
-        }
-    )
-    
-    # LLMに問い合わせ
-    response = llm.invoke(prompt)
-    response_text = response.content
-    
-    # JSONレスポンスを抽出
     try:
-        # JSONブロックを抽出（```json から ``` までの部分）
-        json_start = response_text.find('```json') + 7 if '```json' in response_text else 0
-        json_end = response_text.find('```', json_start) if '```' in response_text[json_start:] else len(response_text)
-        json_str = response_text[json_start:json_end].strip()
+        # 構造化出力用のLLMを取得
+        structured_llm = get_structured_llm(ConsistencyCheckResponse)
         
-        # JSONをパース
-        result = json.loads(json_str)
+        # プロンプトの作成
+        prompt = f"""
+        以下のドキュメントセクションについて整合性をチェックし、詳細なフィードバックを提供してください。
         
-        # 詳細なフィードバックをConsistencyCheckFeedbackに変換
-        result["detailed_feedback"] = [
-            ConsistencyCheckFeedback(**feedback)
-            for feedback in result["detailed_feedback"]
-        ]
+        ## セクション情報
+        セクションID: {section.section_id}
+        タイトル: {section.title}
         
-        return result
+        ## セクション内容
+        {section.content}
+        
+        ## 関連するソースコード解析結果
+        {json.dumps(analysis_results, ensure_ascii=False, indent=2)}
+        
+        以下の観点からセクションの整合性を評価してください：
+        1. 正確性：技術的な誤りや矛盾がないか
+        2. 完全性：必要な情報がすべて含まれているか
+        3. 明確性：説明が明確で理解しやすいか
+        4. 構成：論理的な構造になっているか
+        5. 一貫性：用語や概念が一貫して使用されているか
+        
+        各カテゴリについて詳細なフィードバックを提供し、0.0-1.0のスコアで評価してください。
+        """
+        
+        # LLMに問い合わせ（構造化出力で直接Pydanticモデルとして取得）
+        response = structured_llm.invoke(prompt)
+        
+        # 辞書形式に変換して返す
+        return response.model_dump()
         
     except Exception as e:
-        # JSONパースエラー時のフォールバック
-        print(f"整合性チェック結果のパースに失敗しました: {str(e)}")
+        # エラー時のフォールバック
+        print(f"整合性チェック結果の取得に失敗しました: {str(e)}")
         return {
             "detailed_feedback": [],
             "overall_score": 0.0,

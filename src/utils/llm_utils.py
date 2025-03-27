@@ -5,6 +5,7 @@ from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from langchain.output_parsers import PydanticOutputParser
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from pydantic import BaseModel
 
 
 def get_llm(model_name: str = "gpt-3.5-turbo", temperature: float = 0.0, streaming: bool = False):
@@ -46,9 +47,27 @@ def format_json_output(output: Dict[str, Any], indent: int = 2) -> str:
     return json.dumps(output, ensure_ascii=False, indent=indent)
 
 
+def get_structured_llm(model: Optional[BaseModel], model_name: str = "gpt-3.5-turbo", temperature: float = 0.0, streaming: bool = False):
+    """
+    構造化出力用のLLMインスタンスを取得します
+    
+    Args:
+        model: Pydanticモデル
+        model_name: モデル名
+        temperature: 温度
+        streaming: ストリーミング有効フラグ
+        
+    Returns:
+        構造化出力に対応したLLM
+    """
+    llm = get_llm(model_name, temperature, streaming)
+    return llm.with_structured_output(model)
+
+
 def parse_llm_response_to_model(llm_response: str, output_parser: PydanticOutputParser) -> Any:
     """
     LLMレスポンスをPydanticモデルにパースします
+    (レガシーコード互換用：新しいコードでは get_structured_llm を使用してください)
     
     Args:
         llm_response: LLMからのレスポンス

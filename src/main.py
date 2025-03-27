@@ -109,6 +109,7 @@ def process_dynamic_grouping(state: GraphState) -> GraphState:
         script_summaries.append({
             "script_id": script_id,
             "summary": result.summary if hasattr(result, "summary") else "",
+            "detailed_analysis": result.detailed_analysis if hasattr(result, "detailed_analysis") else "",
             "content": result.content if hasattr(result, "content") else ""
         })
     

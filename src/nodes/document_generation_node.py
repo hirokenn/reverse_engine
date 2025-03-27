@@ -3,15 +3,22 @@ import json
 import os
 import uuid
 
+from pydantic import BaseModel, Field
 from src.model_types import GraphState, DocumentSection
 from src.utils.file_utils import save_markdown, markdown_to_html
 from src.utils.llm_utils import (
     get_llm,
+    get_structured_llm,
     create_structured_prompt,
     DOCUMENT_GENERATION_SYSTEM_PROMPT,
     DOCUMENT_GENERATION_HUMAN_PROMPT
 )
 from src.utils.vector_store import VectorStoreManager
+
+
+class DocumentContent(BaseModel):
+    """ドキュメントコンテンツのスキーマ"""
+    content: str = Field(description="生成されたドキュメントのコンテンツ（Markdown形式）")
 
 
 def generate_document_sections(state: GraphState, vector_store_manager: VectorStoreManager = None) -> GraphState:
@@ -150,6 +157,9 @@ def _generate_system_overview(state: GraphState, vector_store_manager: VectorSto
             for doc in similar_docs:
                 rag_context += f"\n---\n{doc['content']}\n---\n"
     
+    # 構造化出力用のLLMを取得
+    structured_llm = get_structured_llm(DocumentContent)
+    
     # プロンプトを作成
     prompt_template = f"""
 あなたはレガシーシステムの仕様書を作成する技術ドキュメント専門家です。
@@ -178,9 +188,8 @@ def _generate_system_overview(state: GraphState, vector_store_manager: VectorSto
     print(prompt_template[:500] + "..." if len(prompt_template) > 500 else prompt_template)
     print("===== システム概要生成 プロンプト終了 =====\n")
     
-    # LLMを使用して概要を生成
-    llm = get_llm()
-    response = llm.invoke([{"role": "user", "content": prompt_template}])
+    # 構造化出力でLLMを呼び出し
+    response = structured_llm.invoke(prompt_template)
     
     return response.content
 
@@ -243,28 +252,35 @@ def _generate_section_for_group(
                 if not any(doc['metadata'].get('file_path', '') in file_info['file_path'] for file_info in group_files_info):
                     rag_context += f"\n---\n{doc['content']}\n---\n"
     
-    # LLMを使用してセクションを生成
-    llm = get_llm()
+    # 構造化出力用のLLMを取得
+    structured_llm = get_structured_llm(DocumentContent)
     
-    prompt = create_structured_prompt(
-        system_message=DOCUMENT_GENERATION_SYSTEM_PROMPT,
-        human_template=DOCUMENT_GENERATION_HUMAN_PROMPT,
-        input_variables={
-            "group_name": group.group_name,
-            "group_description": group.description,
-            "group_files": group_files_json + rag_context
-        }
-    )
+    # プロンプトを作成
+    prompt = f"""
+あなたはレガシーシステムの仕様書を作成する技術ドキュメント専門家です。
+以下のグループに関する解析情報から、仕様書のセクションを作成してください：
+
+グループ名: {group.group_name}
+グループ説明: {group.description}
+
+このグループに含まれるファイル:
+{group_files_json}
+
+{rag_context}
+
+Markdown形式で、詳細な仕様書セクションを作成してください。
+タイトルは適切なものを選び、必要に応じてサブセクションを追加してください。
+このセクションはシステム全体の仕様書の一部となります。
+"""
     
     # プロンプトを表示
     print(f"\n===== グループセクション生成 プロンプト（{group.group_name}）=====")
-    print(f"システムメッセージ: {DOCUMENT_GENERATION_SYSTEM_PROMPT[:200]}...")
-    print(f"テンプレート: {DOCUMENT_GENERATION_HUMAN_PROMPT[:200]}...")
-    print(f"変数: group_name={group.group_name}, group_description={group.description[:50]}...")
+    print(f"グループ名: {group.group_name}, グループ説明: {group.description[:50]}...")
     print(f"ファイル情報: {len(group_files_info)}ファイル, RAGコンテキスト長: {len(rag_context)}")
     print("===== グループセクション生成 プロンプト終了 =====\n")
     
-    response = llm.invoke(prompt)
+    # 構造化出力でLLMを呼び出し
+    response = structured_llm.invoke(prompt)
     
     return response.content
 
@@ -300,6 +316,9 @@ def _generate_interfaces_section(state: GraphState, vector_store_manager: Vector
             for doc in similar_docs:
                 rag_context += f"\n---\n{doc['content']}\n---\n"
     
+    # 構造化出力用のLLMを取得
+    structured_llm = get_structured_llm(DocumentContent)
+    
     # プロンプトを作成
     prompt_template = f"""
 あなたはレガシーシステムの仕様書を作成する技術ドキュメント専門家です。
@@ -320,9 +339,8 @@ def _generate_interfaces_section(state: GraphState, vector_store_manager: Vector
 技術的に正確で詳細な説明を心がけてください。
 """
     
-    # LLMを使用してインターフェースセクションを生成
-    llm = get_llm()
-    response = llm.invoke([{"role": "user", "content": prompt_template}])
+    # 構造化出力でLLMを呼び出し
+    response = structured_llm.invoke(prompt_template)
     
     return response.content
 
@@ -363,6 +381,9 @@ def _generate_business_logic_section(state: GraphState, vector_store_manager: Ve
             for doc in similar_docs:
                 rag_context += f"\n---\n{doc['content']}\n---\n"
     
+    # 構造化出力用のLLMを取得
+    structured_llm = get_structured_llm(DocumentContent)
+    
     # プロンプトを作成
     prompt_template = f"""
 あなたはレガシーシステムの仕様書を作成する技術ドキュメント専門家です。
@@ -386,9 +407,8 @@ def _generate_business_logic_section(state: GraphState, vector_store_manager: Ve
 技術的に正確で詳細な説明を心がけてください。
 """
     
-    # LLMを使用してビジネスロジックセクションを生成
-    llm = get_llm()
-    response = llm.invoke([{"role": "user", "content": prompt_template}])
+    # 構造化出力でLLMを呼び出し
+    response = structured_llm.invoke(prompt_template)
     
     return response.content
 
